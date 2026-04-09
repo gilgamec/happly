@@ -168,7 +168,6 @@ Generally speaking, hapPLY uses C++ exceptions to communicate errors-- most of t
 
 ## Known issues:
 - Writing floating-point values of `inf` or `nan` in ASCII mode is not supported, because the .ply format does not specify how they should be written (C++'s ofstream and ifstream don't even treat them consistently). These values work just fine in binary mode.
-- Currently hapPLY does not allow the user to specify a type for the variable which indicates how many elements are in a list; it always uses `uchar` (and throws and error if the data does not fit in a uchar). Note that at least for mesh-like data, popular software only accepts `uchar`.
 - Almost all modern computers are little-endian. If you happen to have a big-endian platform, be aware that the codebase has not been tested in a big-endian environment, and might have bugs related to binary reading/writing there. Note that the _platform_ endianness is distinct from the _file_ endianness---reading/writing either big- or little-endian files certainly works just fine as long as you're running the code on a little-endian computer (as you problably are).
 
 

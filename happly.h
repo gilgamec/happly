@@ -439,13 +439,27 @@ public:
       throw std::runtime_error("Attempted property type does not match any type defined by the .ply format.");
     }
 
+    size_t maxCount = 0;
     // Populate list with data
     flattenedIndexStart.push_back(0);
     for (const std::vector<T>& vec : data_) {
       for (const T& val : vec) {
         flattenedData.emplace_back(val);
       }
+      if(vec.size() > maxCount)
+        maxCount = vec.size();
       flattenedIndexStart.push_back(flattenedData.size());
+    }
+
+    if(maxCount > std::numeric_limits<uint32_t>::max()) {
+      throw std::runtime_error(
+        "List property has an element with more entries than fit in a uint32.");
+    } else if(maxCount > std::numeric_limits<uint16_t>::max()) {
+      listCountBytes = 4;
+    } else if(maxCount > std::numeric_limits<uint8_t>::max()) {
+      listCountBytes = 2;
+    } else {
+      listCountBytes = 1;
     }
   };
 
@@ -547,8 +561,14 @@ public:
    * @param outStream Stream to write to.
    */
   virtual void writeHeader(std::ostream& outStream) override {
-    // NOTE: We ALWAYS use uchar as the list count output type
-    outStream << "property list uchar " << typeName<T>() << " " << name << "\n";
+    if(listCountBytes == 1) {
+      outStream << "property list uchar " << typeName<T>() << " " << name << "\n";
+    } else if(listCountBytes == 2) {
+      outStream << "property list ushort " << typeName<T>() << " " << name << "\n";
+    } else if(listCountBytes == 4) {
+      outStream << "property list uint " << typeName<T>() << " " << name << "\n";
+    } else
+      throw std::runtime_error("Unknown value of listCountBytes.");
   }
 
   /**
@@ -561,13 +581,7 @@ public:
     size_t dataStart = flattenedIndexStart[iElement];
     size_t dataEnd = flattenedIndexStart[iElement + 1];
 
-    // Get the number of list elements as a uchar, and ensure the value fits
     size_t dataCount = dataEnd - dataStart;
-    if (dataCount > std::numeric_limits<uint8_t>::max()) {
-      throw std::runtime_error(
-          "List property has an element with more entries than fit in a uchar. See note in README.");
-    }
-
     outStream << dataCount;
     outStream.precision(std::numeric_limits<T>::max_digits10);
     for (size_t iFlat = dataStart; iFlat < dataEnd; iFlat++) {
@@ -585,16 +599,20 @@ public:
     size_t dataStart = flattenedIndexStart[iElement];
     size_t dataEnd = flattenedIndexStart[iElement + 1];
 
-    // Get the number of list elements as a uchar, and ensure the value fits
     size_t dataCount = dataEnd - dataStart;
-    if (dataCount > std::numeric_limits<uint8_t>::max()) {
-      throw std::runtime_error(
-          "List property has an element with more entries than fit in a uchar. See note in README.");
-    }
-    uint8_t count = static_cast<uint8_t>(dataCount);
+    if(listCountBytes == 1) {
+      uint8_t count = static_cast<uint8_t>(dataCount);
+      outStream.write((char*)&count, listCountBytes);
+    } else if(listCountBytes == 2) {
+      uint16_t count = static_cast<uint16_t>(dataCount);
+      outStream.write((char*)&count, listCountBytes);
+    } else if(listCountBytes == 4) {
+      uint32_t count = static_cast<uint32_t>(dataCount);
+      outStream.write((char*)&count, listCountBytes);
+    } else
+      throw std::runtime_error("Unknown value of listCountBytes.");
 
-    outStream.write((char*)&count, sizeof(uint8_t));
-    outStream.write((char*)&flattenedData[dataStart], count * sizeof(T));
+    outStream.write((char*)&flattenedData[dataStart], dataCount * sizeof(T));
   }
 
   /**
@@ -607,15 +625,19 @@ public:
     size_t dataStart = flattenedIndexStart[iElement];
     size_t dataEnd = flattenedIndexStart[iElement + 1];
 
-    // Get the number of list elements as a uchar, and ensure the value fits
     size_t dataCount = dataEnd - dataStart;
-    if (dataCount > std::numeric_limits<uint8_t>::max()) {
-      throw std::runtime_error(
-          "List property has an element with more entries than fit in a uchar. See note in README.");
-    }
-    uint8_t count = static_cast<uint8_t>(dataCount);
+    if(listCountBytes == 1) {
+      uint8_t count = static_cast<uint8_t>(dataCount);
+      outStream.write((char*)&count, listCountBytes);
+    } else if(listCountBytes == 2) {
+      uint16_t count = swapEndian(static_cast<uint16_t>(dataCount));
+      outStream.write((char*)&count, listCountBytes);
+    } else if(listCountBytes == 4) {
+      uint32_t count = swapEndian(static_cast<uint32_t>(dataCount));
+      outStream.write((char*)&count, listCountBytes);
+    } else
+      throw std::runtime_error("Unknown value of listCountBytes.");
 
-    outStream.write((char*)&count, sizeof(uint8_t));
     for (size_t iFlat = dataStart; iFlat < dataEnd; iFlat++) {
       T value = swapEndian(flattenedData[iFlat]);
       outStream.write((char*)&value, sizeof(T));
